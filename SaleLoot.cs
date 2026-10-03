@@ -6,7 +6,9 @@ using MCM.Abstractions.Base.Global;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
+using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameMenus;
 using TaleWorlds.CampaignSystem.GameState;
@@ -22,6 +24,107 @@ using TaleWorlds.MountAndBlade;
 
 namespace SaleLoot
 {
+    // ============================================================
+    //  LOGGER
+    // ============================================================
+    internal static class SaleLootLog
+    {
+        private static readonly object _lock = new object();
+        private static string _logPath = null;
+        private static bool _initFailed = false;
+
+        private static string LogPath
+        {
+            get
+            {
+                if (_logPath != null) return _logPath;
+                if (_initFailed) return null;
+                try
+                {
+                    string dir = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                        "Mount and Blade II Bannerlord",
+                        "Configs",
+                        "SaleLoot");
+                    if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    _logPath = Path.Combine(dir, "saleloot.log");
+                    return _logPath;
+                }
+                catch
+                {
+                    _initFailed = true;
+                    return null;
+                }
+            }
+        }
+
+        public static string GetLogPath() => LogPath;
+
+        public static void Clear()
+        {
+            try
+            {
+                var p = LogPath;
+                if (p != null && File.Exists(p)) File.Delete(p);
+            }
+            catch { }
+        }
+
+        public static void Write(string message)
+        {
+            try
+            {
+                var s = SaleLootSettings.Instance;
+                if (s == null || !s.VerboseLog) return;
+
+                var p = LogPath;
+                if (p == null) return;
+
+                var line = string.Format("[{0:HH:mm:ss.fff}] {1}\r\n", DateTime.Now, message);
+                lock (_lock)
+                {
+                    File.AppendAllText(p, line, Encoding.UTF8);
+                }
+            }
+            catch { }
+        }
+
+        public static void Error(string message)
+        {
+            try
+            {
+                var p = LogPath;
+                if (p == null) return;
+
+                var line = string.Format("[{0:HH:mm:ss.fff}] [ERROR] {1}\r\n", DateTime.Now, message);
+                lock (_lock)
+                {
+                    File.AppendAllText(p, line, Encoding.UTF8);
+                }
+            }
+            catch { }
+        }
+
+        public static void Exc(string where, Exception ex)
+        {
+            try
+            {
+                var p = LogPath;
+                if (p == null) return;
+
+                var sb = new StringBuilder();
+                sb.AppendFormat("[{0:HH:mm:ss.fff}] [EXC] {1}: {2}\r\n", DateTime.Now, where, ex.Message);
+                sb.Append(ex.StackTrace);
+                sb.Append("\r\n");
+                lock (_lock)
+                {
+                    File.AppendAllText(p, sb.ToString(), Encoding.UTF8);
+                }
+            }
+            catch { }
+        }
+    }
+
     // ============================================================
     //  MCM SETTINGS
     // ============================================================
@@ -91,6 +194,18 @@ namespace SaleLoot
             get { try { return _showMessages; } catch { return true; } }
             set { try { if (_showMessages != value) { _showMessages = value; OnPropertyChanged(nameof(ShowMessages)); } } catch { } }
         }
+
+        private bool _verboseLog = false;
+
+        [SettingPropertyGroup("{=SaleLoot_Group_Tiers}Tiers", GroupOrder = 0)]
+        [SettingPropertyBool("{=SaleLoot_VerboseLog_Name}Verbose log file", Order = 11,
+            RequireRestart = false,
+            HintText = "{=SaleLoot_VerboseLog_Hint}Write every step to Configs/SaleLoot/saleloot.log. Very verbose. For diagnostics.")]
+        public bool VerboseLog
+        {
+            get { try { return _verboseLog; } catch { return false; } }
+            set { try { if (_verboseLog != value) { _verboseLog = value; OnPropertyChanged(nameof(VerboseLog)); } } catch { } }
+        }
     }
 
     // ============================================================
@@ -107,10 +222,15 @@ namespace SaleLoot
             {
                 _harmony = new Harmony("com.saleloot.patch");
                 _harmony.PatchAll(typeof(SaleLootSubModule).Assembly);
+
+                SaleLootLog.Clear();
+                SaleLootLog.Write("==== SaleLoot submodule loaded ====");
+
                 InformationManager.DisplayMessage(new InformationMessage("Sale Loot loaded.", Colors.Yellow));
             }
             catch (Exception ex)
             {
+                SaleLootLog.Exc("OnSubModuleLoad", ex);
                 try { InformationManager.DisplayMessage(new InformationMessage("Sale Loot load error: " + ex.Message, Colors.Red)); } catch { }
             }
         }
@@ -118,7 +238,12 @@ namespace SaleLoot
         protected override void OnSubModuleUnloaded()
         {
             base.OnSubModuleUnloaded();
-            try { _harmony?.UnpatchAll("com.saleloot.patch"); } catch { }
+            try
+            {
+                SaleLootLog.Write("==== SaleLoot submodule unloaded ====");
+                _harmony?.UnpatchAll("com.saleloot.patch");
+            }
+            catch (Exception ex) { SaleLootLog.Exc("OnSubModuleUnloaded", ex); }
         }
 
         protected override void OnGameStart(Game game, IGameStarter starterObject)
@@ -130,14 +255,15 @@ namespace SaleLoot
                 {
                     var starter = (CampaignGameStarter)starterObject;
                     starter.AddBehavior(new SaleLootBehavior());
+                    SaleLootLog.Write("SaleLootBehavior added.");
                 }
             }
-            catch { }
+            catch (Exception ex) { SaleLootLog.Exc("OnGameStart", ex); }
         }
     }
 
     // ============================================================
-    //  BEHAVIOR  (menu hook)
+    //  BEHAVIOR
     // ============================================================
     public class SaleLootBehavior : CampaignBehaviorBase
     {
@@ -160,8 +286,9 @@ namespace SaleLoot
                     new GameMenuOption.OnConditionDelegate(OnMenuCondition),
                     new GameMenuOption.OnConsequenceDelegate(OnMenuConsequence),
                     false, 4, false, null);
+                SaleLootLog.Write("Menu option 'Sell Loot' registered on 'town'.");
             }
-            catch { }
+            catch (Exception ex) { SaleLootLog.Exc("OnSessionLaunched", ex); }
         }
 
         private bool OnMenuCondition(MenuCallbackArgs args)
@@ -169,17 +296,23 @@ namespace SaleLoot
             try
             {
                 var s = Settlement.CurrentSettlement;
-                if (s == null || !s.IsTown || s.Town == null) return false;
+                bool ok = s != null && s.IsTown && s.Town != null;
+                SaleLootLog.Write("OnMenuCondition: settlement=" + (s != null ? s.Name.ToString() : "null") + " ok=" + ok);
+                if (!ok) return false;
                 args.optionLeaveType = GameMenuOption.LeaveType.Trade;
                 return true;
             }
-            catch { return false; }
+            catch (Exception ex) { SaleLootLog.Exc("OnMenuCondition", ex); return false; }
         }
 
         private void OnMenuConsequence(MenuCallbackArgs args)
         {
-            try { SaleLootLogic.OpenTradeAndStage(Settlement.CurrentSettlement); }
-            catch { }
+            try
+            {
+                SaleLootLog.Write(">>> OnMenuConsequence: user clicked 'Sell Loot'.");
+                SaleLootLogic.OpenTradeAndStage(Settlement.CurrentSettlement);
+            }
+            catch (Exception ex) { SaleLootLog.Exc("OnMenuConsequence", ex); }
         }
     }
 
@@ -190,186 +323,289 @@ namespace SaleLoot
 
     internal static class SaleLootLogic
     {
-        // ---- Pending staging request (set by menu, consumed by patch) ----
         private static bool _pendingStage = false;
-        private static Settlement _pendingTown = null;
 
-        // Cached reflection handle to SPInventoryVM.ProcessSellItem(SPItemVM, bool).
         private static MethodInfo _processSellItemMethod = null;
+        private static FieldInfo _invLogicField = null;
 
         public static void OpenTradeAndStage(Settlement town)
         {
-            if (town == null || !town.IsTown || town.Town == null) return;
-            _pendingStage = true;
-            _pendingTown = town;
             try
             {
+                if (town == null || !town.IsTown || town.Town == null)
+                {
+                    SaleLootLog.Write("OpenTradeAndStage: invalid town, abort.");
+                    return;
+                }
+                _pendingStage = true;
+                SaleLootLog.Write("OpenTradeAndStage: town=" + town.Name.ToString() + " flag set, opening trade screen.");
+
                 InventoryScreenHelper.ActivateTradeWithCurrentSettlement();
+                SaleLootLog.Write("OpenTradeAndStage: trade screen opened.");
             }
             catch (Exception ex)
             {
                 _pendingStage = false;
-                _pendingTown = null;
+                SaleLootLog.Exc("OpenTradeAndStage", ex);
                 Msg("SaleLoot error: " + ex.Message, SaleLootSettings.Instance);
             }
         }
 
-        // Called by the Harmony postfix on SPInventoryVM's constructor.
-        internal static void OnInventoryVMCreated(SPInventoryVM vm)
+        internal static void OnInventoryReady(SPInventoryVM vm, string caller)
         {
-            if (!_pendingStage) return;
-            var town = _pendingTown;
-            _pendingStage = false;
-            _pendingTown = null;
-            try { ApplyStaging(vm, town); }
-            catch (Exception ex) { Msg("SaleLoot stage error: " + ex.Message, SaleLootSettings.Instance); }
+            try
+            {
+                if (!_pendingStage)
+                {
+                    SaleLootLog.Write("OnInventoryReady(" + caller + "): no pending stage, ignore.");
+                    return;
+                }
+                if (vm == null)
+                {
+                    SaleLootLog.Write("OnInventoryReady(" + caller + "): vm null, ignore.");
+                    return;
+                }
+
+                int listCount = 0;
+                try { listCount = vm.RightItemListVM != null ? vm.RightItemListVM.Count : -1; } catch { listCount = -1; }
+
+                int merchantGold = 0;
+                try { merchantGold = vm.LeftInventoryOwnerGold; } catch { merchantGold = -1; }
+
+                var inv = TryGetInventoryLogic(vm);
+                int totalAmount = -99999;
+                try { if (inv != null) totalAmount = inv.TotalAmount; } catch { }
+
+                SaleLootLog.Write("OnInventoryReady(" + caller + "): listCount=" + listCount
+                    + " LeftInventoryOwnerGold=" + merchantGold
+                    + " inv.TotalAmount=" + totalAmount
+                    + " inv=" + (inv != null ? "ok" : "null"));
+
+                if (listCount <= 0)
+                {
+                    SaleLootLog.Write("OnInventoryReady: list empty, waiting for next call.");
+                    return;
+                }
+                if (merchantGold <= 0)
+                {
+                    SaleLootLog.Write("OnInventoryReady: merchant gold <= 0, waiting for next call.");
+                    return;
+                }
+
+                _pendingStage = false;
+                SaleLootLog.Write("OnInventoryReady: conditions met, running ApplyStaging.");
+
+                ApplyStaging(vm, merchantGold);
+            }
+            catch (Exception ex) { SaleLootLog.Exc("OnInventoryReady(" + caller + ")", ex); }
         }
 
-        // --------------------------------------------------------
-        //  STAGING
-        // --------------------------------------------------------
-        private static void ApplyStaging(SPInventoryVM vm, Settlement town)
+        private static InventoryLogic TryGetInventoryLogic(SPInventoryVM vm)
         {
-            if (vm == null || town == null || town.Town == null) return;
-
-            var settings = SaleLootSettings.Instance;
-            if (settings == null) return;
-
-            // Merchant gold as shown in the trade window.
-            int townGold = 0;
-            try { townGold = vm.LeftInventoryOwnerGold; } catch { }
-            if (townGold <= 0)
+            try
             {
-                try { townGold = town.Town.Gold; } catch { townGold = 0; }
-            }
-            if (townGold <= 0)
-            {
-                Msg("{=SaleLoot_Msg_NoGold}The merchant has no gold to buy anything.", settings);
-                return;
-            }
-
-            var lockedKeys = GetLockedKeys();
-
-            // Resolve the private SPInventoryVM.ProcessSellItem method once.
-            if (_processSellItemMethod == null)
-            {
-                try
+                if (_invLogicField == null)
                 {
-                    _processSellItemMethod = typeof(SPInventoryVM).GetMethod(
-                        "ProcessSellItem",
+                    _invLogicField = typeof(SPInventoryVM).GetField(
+                        "_inventoryLogic",
                         BindingFlags.Instance | BindingFlags.NonPublic);
+                    SaleLootLog.Write("TryGetInventoryLogic: field resolved=" + (_invLogicField != null));
                 }
-                catch { _processSellItemMethod = null; }
+                return _invLogicField?.GetValue(vm) as InventoryLogic;
             }
+            catch (Exception ex) { SaleLootLog.Exc("TryGetInventoryLogic", ex); return null; }
+        }
 
-            if (_processSellItemMethod == null)
+        private static void ApplyStaging(SPInventoryVM vm, int initialMerchantGold)
+        {
+            try
             {
-                Msg("SaleLoot: could not resolve SPInventoryVM.ProcessSellItem", settings);
-                return;
-            }
+                if (vm == null) { SaleLootLog.Write("ApplyStaging: vm null, abort."); return; }
 
-            // Collect candidates from the player's side of the trade window.
-            var candidates = new List<Candidate>();
-            foreach (var itemVM in vm.RightItemListVM)
-            {
-                if (itemVM == null) continue;
-                if (!itemVM.IsTransferable) continue;
-                if (itemVM.IsLocked) continue;
+                var settings = SaleLootSettings.Instance;
+                if (settings == null) { SaleLootLog.Write("ApplyStaging: settings null, abort."); return; }
 
-                var eq = itemVM.ItemRosterElement.EquipmentElement;
-                var item = eq.Item;
-                if (item == null) continue;
-                if (item.NotMerchandise) continue;
+                SaleLootLog.Write("ApplyStaging: START. merchant gold=" + initialMerchantGold
+                    + " tiers W/A/A/H=" + settings.MaxWeaponTier + "/" + settings.MaxAmmoTier + "/" + settings.MaxArmorTier + "/" + settings.MaxHorseArmorTier);
 
-                var cat = GetCategory(item);
-                if (cat == LootCategory.None) continue;
+                long budgetRemaining = initialMerchantGold;
 
-                int maxTier = GetMaxTier(cat, settings);
-                int itemTier = GetTierForUi(item);
-                if (itemTier > maxTier) continue;
+                var lockedKeys = GetLockedKeys();
+                SaleLootLog.Write("ApplyStaging: locked keys count=" + lockedKeys.Count);
 
-                if (IsLocked(lockedKeys, itemVM.ItemRosterElement)) continue;
-
-                int price = 0;
-                try { price = itemVM.ItemCost; } catch { price = 0; }
-                if (price <= 0) continue;
-
-                candidates.Add(new Candidate { VM = itemVM, Price = price });
-            }
-
-            if (candidates.Count == 0)
-            {
-                Msg("{=SaleLoot_Msg_Nothing}No suitable loot to sell.", settings);
-                return;
-            }
-
-            candidates.Sort((a, b) => a.Price.CompareTo(b.Price));
-
-            long stagedValue = 0;
-            int stagedUnits = 0;
-            int failures = 0;
-
-            foreach (var c in candidates)
-            {
-                if (stagedValue >= townGold) break;
-                if (c.VM == null) continue;
-
-                int available = 0;
-                try { available = c.VM.ItemCount; } catch { available = 0; }
-                if (available <= 0) continue;
-
-                long remainingGold = (long)townGold - stagedValue;
-                int maxAffordable = (int)Math.Min((long)available, remainingGold / c.Price);
-                if (maxAffordable <= 0) continue;
-
-                try
+                if (_processSellItemMethod == null)
                 {
-                    c.VM.TransactionCount = maxAffordable;
-
-                    // Call SPInventoryVM.ProcessSellItem(item, cameFromTradeData:true)
-                    // on the CURRENT vm instance — this is exactly the code path
-                    // the game uses when a player clicks the item.
-                    _processSellItemMethod.Invoke(vm, new object[] { c.VM, true });
-
-                    stagedUnits += maxAffordable;
-                    stagedValue += (long)maxAffordable * c.Price;
-                }
-                catch (TargetInvocationException tie)
-                {
-                    failures++;
-                    // Report only the first exception to avoid spam.
-                    if (failures == 1)
+                    try
                     {
+                        _processSellItemMethod = typeof(SPInventoryVM).GetMethod(
+                            "ProcessSellItem",
+                            BindingFlags.Instance | BindingFlags.NonPublic);
+                    }
+                    catch (Exception ex) { SaleLootLog.Exc("resolve ProcessSellItem", ex); }
+                    SaleLootLog.Write("ApplyStaging: ProcessSellItem method=" + (_processSellItemMethod != null));
+                }
+
+                if (_processSellItemMethod == null)
+                {
+                    SaleLootLog.Write("ApplyStaging: could not resolve ProcessSellItem, abort.");
+                    Msg("SaleLoot: could not resolve SPInventoryVM.ProcessSellItem", settings);
+                    return;
+                }
+
+                // ---- Collect candidates ----
+                int totalScanned = 0;
+                int rejectedNotTransferable = 0;
+                int rejectedLocked = 0;
+                int rejectedNotMerch = 0;
+                int rejectedCategory = 0;
+                int rejectedTier = 0;
+                int rejectedLockKey = 0;
+                int rejectedPrice = 0;
+
+                var candidates = new List<Candidate>();
+                foreach (var itemVM in vm.RightItemListVM)
+                {
+                    totalScanned++;
+                    if (itemVM == null) continue;
+                    if (!itemVM.IsTransferable) { rejectedNotTransferable++; continue; }
+                    if (itemVM.IsLocked) { rejectedLocked++; continue; }
+
+                    var eq = itemVM.ItemRosterElement.EquipmentElement;
+                    var item = eq.Item;
+                    if (item == null) continue;
+                    if (item.NotMerchandise) { rejectedNotMerch++; continue; }
+
+                    var cat = GetCategory(item);
+                    if (cat == LootCategory.None) { rejectedCategory++; continue; }
+
+                    int maxTier = GetMaxTier(cat, settings);
+                    int itemTier = GetTierForUi(item);
+                    if (itemTier > maxTier)
+                    {
+                        rejectedTier++;
+                        SaleLootLog.Write("  [skip] " + item.Name + " tier=" + itemTier + " > max=" + maxTier + " cat=" + cat);
+                        continue;
+                    }
+
+                    if (IsLocked(lockedKeys, itemVM.ItemRosterElement)) { rejectedLockKey++; continue; }
+
+                    int price = 0;
+                    try { price = itemVM.ItemCost; } catch { price = 0; }
+                    if (price <= 0) { rejectedPrice++; continue; }
+
+                    candidates.Add(new Candidate { VM = itemVM, Price = price });
+                }
+
+                SaleLootLog.Write("ApplyStaging: scanned=" + totalScanned
+                    + " candidates=" + candidates.Count
+                    + " | rejected: notTransferable=" + rejectedNotTransferable
+                    + " lockedFlag=" + rejectedLocked
+                    + " notMerch=" + rejectedNotMerch
+                    + " category=None=" + rejectedCategory
+                    + " tier=" + rejectedTier
+                    + " lockKey=" + rejectedLockKey
+                    + " price=0=" + rejectedPrice);
+
+                if (candidates.Count == 0)
+                {
+                    SaleLootLog.Write("ApplyStaging: no candidates, sending chat msg.");
+                    Msg("{=SaleLoot_Msg_Nothing}No suitable loot to sell. (list={L})", settings,
+                        ("L", (vm.RightItemListVM != null ? vm.RightItemListVM.Count : 0).ToString()));
+                    return;
+                }
+
+                candidates.Sort((a, b) => a.Price.CompareTo(b.Price));
+
+                int logN = Math.Min(10, candidates.Count);
+                for (int i = 0; i < logN; i++)
+                {
+                    var c = candidates[i];
+                    string nm = "?";
+                    try { nm = c.VM.ItemRosterElement.EquipmentElement.Item.Name.ToString(); } catch { }
+                    int cnt = 0; try { cnt = c.VM.ItemCount; } catch { }
+                    SaleLootLog.Write("  cheapest[" + i + "] " + nm + " price=" + c.Price + " count=" + cnt);
+                }
+
+                long stagedValue = 0;
+                int stagedUnits = 0;
+                int failures = 0;
+                int stagedStacks = 0;
+
+                foreach (var c in candidates)
+                {
+                    if (c.VM == null) continue;
+                    if (budgetRemaining <= 0) break;
+                    if (c.Price > budgetRemaining) continue;
+
+                    int available = 0;
+                    try { available = c.VM.ItemCount; } catch { available = 0; }
+                    if (available <= 0) continue;
+
+                    int maxAffordable = (int)Math.Min((long)available, budgetRemaining / c.Price);
+                    if (maxAffordable <= 0) continue;
+
+                    try
+                    {
+                        c.VM.TransactionCount = maxAffordable;
+                        _processSellItemMethod.Invoke(vm, new object[] { c.VM, true });
+                        stagedUnits += maxAffordable;
+                        stagedValue += (long)maxAffordable * c.Price;
+                        budgetRemaining -= (long)maxAffordable * c.Price;
+                        stagedStacks++;
+                    }
+                    catch (TargetInvocationException tie)
+                    {
+                        failures++;
                         string msg = (tie.InnerException != null) ? tie.InnerException.Message : tie.Message;
-                        Msg("SaleLoot invoke error: " + msg, settings);
+                        SaleLootLog.Write("ApplyStaging: invoke threw: " + msg);
+                        if (failures == 1) Msg("SaleLoot invoke error: " + msg, settings);
                     }
-                }
-                catch (Exception ex)
-                {
-                    failures++;
-                    if (failures == 1)
+                    catch (Exception ex)
                     {
-                        Msg("SaleLoot invoke error: " + ex.Message, settings);
+                        failures++;
+                        SaleLootLog.Exc("invoke", ex);
+                        if (failures == 1) Msg("SaleLoot invoke error: " + ex.Message, settings);
                     }
                 }
-            }
 
-            if (stagedUnits > 0)
-            {
-                Msg("{=SaleLoot_Msg_Staged}Staged {COUNT} items for sale ({GOLD} denars). Review and confirm in the trade window.",
-                    settings,
-                    ("COUNT", stagedUnits.ToString()),
-                    ("GOLD", stagedValue.ToString()));
+                SaleLootLog.Write("ApplyStaging: END. stacks=" + stagedStacks
+                    + " units=" + stagedUnits
+                    + " value=" + stagedValue
+                    + " budgetLeft=" + budgetRemaining
+                    + " failures=" + failures);
+
+                if (stagedUnits > 0)
+                {
+                    Msg("{=SaleLoot_Msg_Staged}Staged {COUNT} items for sale ({GOLD} denars). Review and confirm in the trade window.",
+                        settings,
+                        ("COUNT", stagedUnits.ToString()),
+                        ("GOLD", stagedValue.ToString()));
+
+                    // Summary of what was left behind.
+                    int skippedLocked = rejectedLocked + rejectedLockKey;
+                    int skippedNotForSale = rejectedNotMerch + rejectedNotTransferable;
+                    int skippedOverTier = rejectedTier;
+
+                    if (skippedLocked > 0 || skippedNotForSale > 0 || skippedOverTier > 0)
+                    {
+                        Msg("{=SaleLoot_Msg_Skipped}Skipped: {LOCKED} locked, {NOTFORSALE} not-for-sale, {OVERTIER} over tier.",
+                            settings,
+                            ("LOCKED", skippedLocked.ToString()),
+                            ("NOTFORSALE", skippedNotForSale.ToString()),
+                            ("OVERTIER", skippedOverTier.ToString()));
+                    }
+                }
+                else
+                {
+                    Msg("SaleLoot diag: gold={G} cand={C} cheapest={P} fail={F} staged=0",
+                        settings,
+                        ("G", initialMerchantGold.ToString()),
+                        ("C", candidates.Count.ToString()),
+                        ("P", candidates[0].Price.ToString()),
+                        ("F", failures.ToString()));
+                }
             }
-            else
-            {
-                Msg("SaleLoot diag: gold={G} cand={C} cheapest={P} fail={F} staged=0",
-                    settings,
-                    ("G", townGold.ToString()),
-                    ("C", candidates.Count.ToString()),
-                    ("P", candidates[0].Price.ToString()),
-                    ("F", failures.ToString()));
-            }
+            catch (Exception ex) { SaleLootLog.Exc("ApplyStaging", ex); }
         }
 
         private struct Candidate
@@ -378,9 +614,6 @@ namespace SaleLoot
             public int Price;
         }
 
-        // --------------------------------------------------------
-        //  CATEGORY / TIER
-        // --------------------------------------------------------
         private static LootCategory GetCategory(ItemObject item)
         {
             if (item == null) return LootCategory.None;
@@ -482,9 +715,6 @@ namespace SaleLoot
             return -1;
         }
 
-        // --------------------------------------------------------
-        //  LOCKS
-        // --------------------------------------------------------
         private static HashSet<string> GetLockedKeys()
         {
             var set = new HashSet<string>(StringComparer.Ordinal);
@@ -509,7 +739,7 @@ namespace SaleLoot
                     if (!string.IsNullOrWhiteSpace(str)) set.Add(str);
                 }
             }
-            catch { }
+            catch (Exception ex) { SaleLootLog.Exc("GetLockedKeys", ex); }
             return set;
         }
 
@@ -532,32 +762,39 @@ namespace SaleLoot
             catch { return false; }
         }
 
-        // --------------------------------------------------------
-        //  CHAT
-        // --------------------------------------------------------
         private static void Msg(string text, SaleLootSettings settings, params (string, string)[] args)
         {
             try
             {
-                if (settings != null && !settings.ShowMessages) return;
-
                 var to = new TextObject(text);
                 if (args != null)
                 {
-                    foreach (var (k, v) in args)
-                    {
-                        to.SetTextVariable(k, v);
-                    }
+                    foreach (var (k, v) in args) to.SetTextVariable(k, v);
                 }
-                InformationManager.DisplayMessage(new InformationMessage(to.ToString(), Colors.Yellow));
+                string final = to.ToString();
+                SaleLootLog.Write("[CHAT] " + final);
+
+                if (settings != null && !settings.ShowMessages) return;
+                InformationManager.DisplayMessage(new InformationMessage(final, Colors.Yellow));
             }
-            catch { }
+            catch (Exception ex) { SaleLootLog.Exc("Msg", ex); }
         }
     }
 
     // ============================================================
-    //  HARMONY PATCH — SPInventoryVM constructor
+    //  HARMONY PATCHES
     // ============================================================
+    [HarmonyPatch(typeof(SPInventoryVM), "InitializeInventory")]
+    internal static class Patch_InitializeInventory
+    {
+        [HarmonyPostfix]
+        private static void Postfix(SPInventoryVM __instance)
+        {
+            try { SaleLootLogic.OnInventoryReady(__instance, "InitializeInventory"); }
+            catch (Exception ex) { SaleLootLog.Exc("Postfix_InitializeInventory", ex); }
+        }
+    }
+
     [HarmonyPatch(typeof(SPInventoryVM), MethodType.Constructor, new Type[]
     {
         typeof(InventoryLogic),
@@ -569,8 +806,19 @@ namespace SaleLoot
         [HarmonyPostfix]
         private static void Postfix(SPInventoryVM __instance)
         {
-            try { SaleLootLogic.OnInventoryVMCreated(__instance); }
-            catch { }
+            try { SaleLootLogic.OnInventoryReady(__instance, "ctor"); }
+            catch (Exception ex) { SaleLootLog.Exc("Postfix_Ctor", ex); }
+        }
+    }
+
+    [HarmonyPatch(typeof(SPInventoryVM), "UpdateLeftCharacter")]
+    internal static class Patch_UpdateLeftCharacter
+    {
+        [HarmonyPostfix]
+        private static void Postfix(SPInventoryVM __instance)
+        {
+            try { SaleLootLogic.OnInventoryReady(__instance, "UpdateLeftCharacter"); }
+            catch (Exception ex) { SaleLootLog.Exc("Postfix_UpdateLeftCharacter", ex); }
         }
     }
 }
