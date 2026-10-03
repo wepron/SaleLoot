@@ -531,41 +531,64 @@ namespace SaleLoot
                 int failures = 0;
                 int stagedStacks = 0;
 
-                foreach (var c in candidates)
+                // Make sure the vanilla ProcessSellItem picks up our TransactionCount
+                // and takes the "cameFromTradeData:false" branch (which calls
+                // ExecuteRemoveZeroCounts). Save/restore the UI modifier flags so we
+                // don't interfere with real clicks.
+                bool savedEntire = vm.IsEntireStackModifierActive;
+                bool savedFive = vm.IsFiveStackModifierActive;
+                vm.IsEntireStackModifierActive = false;
+                vm.IsFiveStackModifierActive = false;
+
+                try
                 {
-                    if (c.VM == null) continue;
-                    if (budgetRemaining <= 0) break;
-                    if (c.Price > budgetRemaining) continue;
-
-                    int available = 0;
-                    try { available = c.VM.ItemCount; } catch { available = 0; }
-                    if (available <= 0) continue;
-
-                    int maxAffordable = (int)Math.Min((long)available, budgetRemaining / c.Price);
-                    if (maxAffordable <= 0) continue;
-
-                    try
+                    foreach (var c in candidates)
                     {
-                        c.VM.TransactionCount = maxAffordable;
-                        _processSellItemMethod.Invoke(vm, new object[] { c.VM, true });
-                        stagedUnits += maxAffordable;
-                        stagedValue += (long)maxAffordable * c.Price;
-                        budgetRemaining -= (long)maxAffordable * c.Price;
-                        stagedStacks++;
+                        if (c.VM == null) continue;
+                        if (budgetRemaining <= 0) break;
+                        if (c.Price > budgetRemaining) continue;
+
+                        int available = 0;
+                        try { available = c.VM.ItemCount; } catch { available = 0; }
+                        if (available <= 0) continue;
+
+                        int maxAffordable = (int)Math.Min((long)available, budgetRemaining / c.Price);
+                        if (maxAffordable <= 0) continue;
+
+                        try
+                        {
+                            c.VM.TransactionCount = maxAffordable;
+
+                            // cameFromTradeData: false →
+                            //   ProcessSellItem uses item.TransactionCount, then calls
+                            //   ExecuteRemoveZeroCounts(), which drops the 0-count row
+                            //   from the visual list. This fixes the "0 шт" ghost entry.
+                            _processSellItemMethod.Invoke(vm, new object[] { c.VM, false });
+
+                            stagedUnits += maxAffordable;
+                            stagedValue += (long)maxAffordable * c.Price;
+                            budgetRemaining -= (long)maxAffordable * c.Price;
+                            stagedStacks++;
+                        }
+                        catch (TargetInvocationException tie)
+                        {
+                            failures++;
+                            string msg = (tie.InnerException != null) ? tie.InnerException.Message : tie.Message;
+                            SaleLootLog.Write("ApplyStaging: invoke threw: " + msg);
+                            if (failures == 1) Msg("SaleLoot invoke error: " + msg, settings);
+                        }
+                        catch (Exception ex)
+                        {
+                            failures++;
+                            SaleLootLog.Exc("invoke", ex);
+                            if (failures == 1) Msg("SaleLoot invoke error: " + ex.Message, settings);
+                        }
                     }
-                    catch (TargetInvocationException tie)
-                    {
-                        failures++;
-                        string msg = (tie.InnerException != null) ? tie.InnerException.Message : tie.Message;
-                        SaleLootLog.Write("ApplyStaging: invoke threw: " + msg);
-                        if (failures == 1) Msg("SaleLoot invoke error: " + msg, settings);
-                    }
-                    catch (Exception ex)
-                    {
-                        failures++;
-                        SaleLootLog.Exc("invoke", ex);
-                        if (failures == 1) Msg("SaleLoot invoke error: " + ex.Message, settings);
-                    }
+                }
+                finally
+                {
+                    vm.IsEntireStackModifierActive = savedEntire;
+                    vm.IsFiveStackModifierActive = savedFive;
                 }
 
                 SaleLootLog.Write("ApplyStaging: END. stacks=" + stagedStacks
@@ -581,7 +604,6 @@ namespace SaleLoot
                         ("COUNT", stagedUnits.ToString()),
                         ("GOLD", stagedValue.ToString()));
 
-                    // Summary of what was left behind.
                     int skippedLocked = rejectedLocked + rejectedLockKey;
                     int skippedNotForSale = rejectedNotMerch + rejectedNotTransferable;
                     int skippedOverTier = rejectedTier;
