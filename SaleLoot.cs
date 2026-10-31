@@ -11,10 +11,7 @@ using System.Reflection;
 using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameMenus;
-using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.CampaignSystem.Inventory;
-using TaleWorlds.CampaignSystem.Party;
-using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.CampaignSystem.ViewModelCollection.Inventory;
 using TaleWorlds.Core;
@@ -135,6 +132,19 @@ namespace SaleLoot
         public override string FolderName => "SaleLoot";
         public override string FormatType => "json2";
 
+        // ---- Master switch ----
+        private bool _enabled = true;
+
+        [SettingPropertyGroup("{=SaleLoot_Group_Tiers}Tiers", GroupOrder = 0)]
+        [SettingPropertyBool("{=SaleLoot_Enabled_Name}Enable mod", Order = -1,
+            RequireRestart = false,
+            HintText = "{=SaleLoot_Enabled_Hint}Turn the mod on or off. When off, the 'Sell Loot' menu option is hidden and nothing else happens.")]
+        public bool Enabled
+        {
+            get { try { return _enabled; } catch { return true; } }
+            set { try { if (_enabled != value) { _enabled = value; OnPropertyChanged(nameof(Enabled)); } } catch { } }
+        }
+
         private int _maxWeaponTier = 6;
 
         [SettingPropertyGroup("{=SaleLoot_Group_Tiers}Tiers", GroupOrder = 0)]
@@ -206,6 +216,154 @@ namespace SaleLoot
             get { try { return _verboseLog; } catch { return false; } }
             set { try { if (_verboseLog != value) { _verboseLog = value; OnPropertyChanged(nameof(VerboseLog)); } } catch { } }
         }
+
+        // ============================================================
+        //  GOODS (master switch + 22 individual toggles)
+        // ============================================================
+
+        private bool _enableGoods = true;
+
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_EnableGoods_Name}Sell goods", Order = -1,
+            RequireRestart = false,
+            HintText = "{=SaleLoot_EnableGoods_Hint}Turn on or off the whole Goods section. When off, no goods are ever sold, regardless of individual toggles.")]
+        public bool EnableGoods
+        {
+            get { try { return _enableGoods; } catch { return true; } }
+            set { try { if (_enableGoods != value) { _enableGoods = value; OnPropertyChanged(nameof(EnableGoods)); } } catch { } }
+        }
+
+        // --- wool
+        private bool _goodWool = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_wool_Name}Wool", Order = 0, RequireRestart = false)]
+        public bool GoodWool { get { try { return _goodWool; } catch { return false; } } set { try { if (_goodWool != value) { _goodWool = value; OnPropertyChanged(nameof(GoodWool)); } } catch { } } }
+
+        // --- silver
+        private bool _goodSilver = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_silver_Name}Silver Ore", Order = 1, RequireRestart = false)]
+        public bool GoodSilver { get { try { return _goodSilver; } catch { return false; } } set { try { if (_goodSilver != value) { _goodSilver = value; OnPropertyChanged(nameof(GoodSilver)); } } catch { } } }
+
+        // --- jewelry
+        private bool _goodJewelry = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_jewelry_Name}Jewelry", Order = 2, RequireRestart = false)]
+        public bool GoodJewelry { get { try { return _goodJewelry; } catch { return false; } } set { try { if (_goodJewelry != value) { _goodJewelry = value; OnPropertyChanged(nameof(GoodJewelry)); } } catch { } } }
+
+        // --- salt
+        private bool _goodSalt = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_salt_Name}Salt", Order = 3, RequireRestart = false)]
+        public bool GoodSalt { get { try { return _goodSalt; } catch { return false; } } set { try { if (_goodSalt != value) { _goodSalt = value; OnPropertyChanged(nameof(GoodSalt)); } } catch { } } }
+
+        // --- spice
+        private bool _goodSpice = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_spice_Name}Spice", Order = 4, RequireRestart = false)]
+        public bool GoodSpice { get { try { return _goodSpice; } catch { return false; } } set { try { if (_goodSpice != value) { _goodSpice = value; OnPropertyChanged(nameof(GoodSpice)); } } catch { } } }
+
+        // --- cotton (Raw Silk)
+        private bool _goodCotton = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_cotton_Name}Raw Silk", Order = 5, RequireRestart = false)]
+        public bool GoodCotton { get { try { return _goodCotton; } catch { return false; } } set { try { if (_goodCotton != value) { _goodCotton = value; OnPropertyChanged(nameof(GoodCotton)); } } catch { } } }
+
+        // --- flax
+        private bool _goodFlax = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_flax_Name}Flax", Order = 6, RequireRestart = false)]
+        public bool GoodFlax { get { try { return _goodFlax; } catch { return false; } } set { try { if (_goodFlax != value) { _goodFlax = value; OnPropertyChanged(nameof(GoodFlax)); } } catch { } } }
+
+        // --- clay
+        private bool _goodClay = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_clay_Name}Clay", Order = 7, RequireRestart = false)]
+        public bool GoodClay { get { try { return _goodClay; } catch { return false; } } set { try { if (_goodClay != value) { _goodClay = value; OnPropertyChanged(nameof(GoodClay)); } } catch { } } }
+
+        // --- pottery
+        private bool _goodPottery = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_pottery_Name}Pottery", Order = 8, RequireRestart = false)]
+        public bool GoodPottery { get { try { return _goodPottery; } catch { return false; } } set { try { if (_goodPottery != value) { _goodPottery = value; OnPropertyChanged(nameof(GoodPottery)); } } catch { } } }
+
+        // --- linen
+        private bool _goodLinen = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_linen_Name}Linen", Order = 9, RequireRestart = false)]
+        public bool GoodLinen { get { try { return _goodLinen; } catch { return false; } } set { try { if (_goodLinen != value) { _goodLinen = value; OnPropertyChanged(nameof(GoodLinen)); } } catch { } } }
+
+        // --- leather
+        private bool _goodLeather = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_leather_Name}Leather", Order = 10, RequireRestart = false)]
+        public bool GoodLeather { get { try { return _goodLeather; } catch { return false; } } set { try { if (_goodLeather != value) { _goodLeather = value; OnPropertyChanged(nameof(GoodLeather)); } } catch { } } }
+
+        // --- velvet
+        private bool _goodVelvet = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_velvet_Name}Velvet", Order = 11, RequireRestart = false)]
+        public bool GoodVelvet { get { try { return _goodVelvet; } catch { return false; } } set { try { if (_goodVelvet != value) { _goodVelvet = value; OnPropertyChanged(nameof(GoodVelvet)); } } catch { } } }
+
+        // --- wine
+        private bool _goodWine = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_wine_Name}Wine", Order = 12, RequireRestart = false)]
+        public bool GoodWine { get { try { return _goodWine; } catch { return false; } } set { try { if (_goodWine != value) { _goodWine = value; OnPropertyChanged(nameof(GoodWine)); } } catch { } } }
+
+        // --- oil
+        private bool _goodOil = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_oil_Name}Oil", Order = 13, RequireRestart = false)]
+        public bool GoodOil { get { try { return _goodOil; } catch { return false; } } set { try { if (_goodOil != value) { _goodOil = value; OnPropertyChanged(nameof(GoodOil)); } } catch { } } }
+
+        // --- fur
+        private bool _goodFur = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_fur_Name}Fur", Order = 14, RequireRestart = false)]
+        public bool GoodFur { get { try { return _goodFur; } catch { return false; } } set { try { if (_goodFur != value) { _goodFur = value; OnPropertyChanged(nameof(GoodFur)); } } catch { } } }
+
+        // --- hardwood
+        private bool _goodHardwood = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_hardwood_Name}Hardwood", Order = 15, RequireRestart = false)]
+        public bool GoodHardwood { get { try { return _goodHardwood; } catch { return false; } } set { try { if (_goodHardwood != value) { _goodHardwood = value; OnPropertyChanged(nameof(GoodHardwood)); } } catch { } } }
+
+        // --- charcoal
+        private bool _goodCharcoal = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_charcoal_Name}Charcoal", Order = 16, RequireRestart = false)]
+        public bool GoodCharcoal { get { try { return _goodCharcoal; } catch { return false; } } set { try { if (_goodCharcoal != value) { _goodCharcoal = value; OnPropertyChanged(nameof(GoodCharcoal)); } } catch { } } }
+
+        // --- iron_ore
+        private bool _goodIronOre = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_iron_ore_Name}Iron Ore", Order = 17, RequireRestart = false)]
+        public bool GoodIronOre { get { try { return _goodIronOre; } catch { return false; } } set { try { if (_goodIronOre != value) { _goodIronOre = value; OnPropertyChanged(nameof(GoodIronOre)); } } catch { } } }
+
+        // --- iron
+        private bool _goodIron = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_iron_Name}Iron", Order = 18, RequireRestart = false)]
+        public bool GoodIron { get { try { return _goodIron; } catch { return false; } } set { try { if (_goodIron != value) { _goodIron = value; OnPropertyChanged(nameof(GoodIron)); } } catch { } } }
+
+        // --- steel
+        private bool _goodSteel = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_steel_Name}Steel", Order = 19, RequireRestart = false)]
+        public bool GoodSteel { get { try { return _goodSteel; } catch { return false; } } set { try { if (_goodSteel != value) { _goodSteel = value; OnPropertyChanged(nameof(GoodSteel)); } } catch { } } }
+
+        // --- fine_steel
+        private bool _goodFineSteel = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_fine_steel_Name}Fine Steel", Order = 20, RequireRestart = false)]
+        public bool GoodFineSteel { get { try { return _goodFineSteel; } catch { return false; } } set { try { if (_goodFineSteel != value) { _goodFineSteel = value; OnPropertyChanged(nameof(GoodFineSteel)); } } catch { } } }
+
+        // --- thamaskene_steel
+        private bool _goodThamaskeneSteel = false;
+        [SettingPropertyGroup("{=SaleLoot_Group_Goods}Goods", GroupOrder = 1)]
+        [SettingPropertyBool("{=SaleLoot_Good_thamaskene_steel_Name}Thamaskene Steel", Order = 21, RequireRestart = false)]
+        public bool GoodThamaskeneSteel { get { try { return _goodThamaskeneSteel; } catch { return false; } } set { try { if (_goodThamaskeneSteel != value) { _goodThamaskeneSteel = value; OnPropertyChanged(nameof(GoodThamaskeneSteel)); } } catch { } } }
     }
 
     // ============================================================
@@ -295,6 +453,13 @@ namespace SaleLoot
         {
             try
             {
+                var settings = SaleLootSettings.Instance;
+                if (settings == null || !settings.Enabled)
+                {
+                    SaleLootLog.Write("OnMenuCondition: mod disabled, hiding option.");
+                    return false;
+                }
+
                 var s = Settlement.CurrentSettlement;
                 bool ok = s != null && s.IsTown && s.Town != null;
                 SaleLootLog.Write("OnMenuCondition: settlement=" + (s != null ? s.Name.ToString() : "null") + " ok=" + ok);
@@ -309,6 +474,9 @@ namespace SaleLoot
         {
             try
             {
+                var settings = SaleLootSettings.Instance;
+                if (settings == null || !settings.Enabled) return;
+
                 SaleLootLog.Write(">>> OnMenuConsequence: user clicked 'Sell Loot'.");
                 SaleLootLogic.OpenTradeAndStage(Settlement.CurrentSettlement);
             }
@@ -319,7 +487,7 @@ namespace SaleLoot
     // ============================================================
     //  CORE LOGIC
     // ============================================================
-    internal enum LootCategory { None, Weapon, Ammo, Armor, HorseArmor }
+    internal enum LootCategory { None, Weapon, Ammo, Armor, HorseArmor, Goods }
 
     internal static class SaleLootLogic
     {
@@ -332,6 +500,13 @@ namespace SaleLoot
         {
             try
             {
+                var settings = SaleLootSettings.Instance;
+                if (settings == null || !settings.Enabled)
+                {
+                    SaleLootLog.Write("OpenTradeAndStage: mod disabled, abort.");
+                    return;
+                }
+
                 if (town == null || !town.IsTown || town.Town == null)
                 {
                     SaleLootLog.Write("OpenTradeAndStage: invalid town, abort.");
@@ -363,6 +538,14 @@ namespace SaleLoot
                 if (vm == null)
                 {
                     SaleLootLog.Write("OnInventoryReady(" + caller + "): vm null, ignore.");
+                    return;
+                }
+
+                var s = SaleLootSettings.Instance;
+                if (s == null || !s.Enabled)
+                {
+                    _pendingStage = false;
+                    SaleLootLog.Write("OnInventoryReady(" + caller + "): mod disabled, clearing pending and ignore.");
                     return;
                 }
 
@@ -424,9 +607,11 @@ namespace SaleLoot
 
                 var settings = SaleLootSettings.Instance;
                 if (settings == null) { SaleLootLog.Write("ApplyStaging: settings null, abort."); return; }
+                if (!settings.Enabled) { SaleLootLog.Write("ApplyStaging: mod disabled, abort."); return; }
 
                 SaleLootLog.Write("ApplyStaging: START. merchant gold=" + initialMerchantGold
-                    + " tiers W/A/A/H=" + settings.MaxWeaponTier + "/" + settings.MaxAmmoTier + "/" + settings.MaxArmorTier + "/" + settings.MaxHorseArmorTier);
+                    + " tiers W/A/A/H=" + settings.MaxWeaponTier + "/" + settings.MaxAmmoTier + "/" + settings.MaxArmorTier + "/" + settings.MaxHorseArmorTier
+                    + " EnableGoods=" + settings.EnableGoods);
 
                 long budgetRemaining = initialMerchantGold;
 
@@ -462,6 +647,11 @@ namespace SaleLoot
                 int rejectedLockKey = 0;
                 int rejectedPrice = 0;
 
+                // Goods-specific counters
+                int rejectedGoodsMaster = 0;
+                int rejectedGoodsFood = 0;
+                int rejectedGoodsToggle = 0;
+
                 var candidates = new List<Candidate>();
                 foreach (var itemVM in vm.RightItemListVM)
                 {
@@ -478,6 +668,23 @@ namespace SaleLoot
                     var cat = GetCategory(item);
                     if (cat == LootCategory.None) { rejectedCategory++; continue; }
 
+                    // ---- GOODS branch ----
+                    if (cat == LootCategory.Goods)
+                    {
+                        if (!settings.EnableGoods) { rejectedGoodsMaster++; continue; }
+                        if (item.IsFood) { rejectedGoodsFood++; continue; }
+                        if (IsLocked(lockedKeys, itemVM.ItemRosterElement)) { rejectedLockKey++; continue; }
+                        if (!IsGoodsEnabled(item.StringId, settings)) { rejectedGoodsToggle++; continue; }
+
+                        int goodsPrice = 0;
+                        try { goodsPrice = itemVM.ItemCost; } catch { goodsPrice = 0; }
+                        if (goodsPrice <= 0) { rejectedPrice++; continue; }
+
+                        candidates.Add(new Candidate { VM = itemVM, Price = goodsPrice });
+                        continue;
+                    }
+
+                    // ---- Tier-based branch (weapons / ammo / armor / horse armor) ----
                     int maxTier = GetMaxTier(cat, settings);
                     int itemTier = GetTierForUi(item);
                     if (itemTier > maxTier)
@@ -504,7 +711,10 @@ namespace SaleLoot
                     + " category=None=" + rejectedCategory
                     + " tier=" + rejectedTier
                     + " lockKey=" + rejectedLockKey
-                    + " price=0=" + rejectedPrice);
+                    + " price=0=" + rejectedPrice
+                    + " | goods: master=" + rejectedGoodsMaster
+                    + " food=" + rejectedGoodsFood
+                    + " toggle=" + rejectedGoodsToggle);
 
                 if (candidates.Count == 0)
                 {
@@ -531,10 +741,6 @@ namespace SaleLoot
                 int failures = 0;
                 int stagedStacks = 0;
 
-                // Make sure the vanilla ProcessSellItem picks up our TransactionCount
-                // and takes the "cameFromTradeData:false" branch (which calls
-                // ExecuteRemoveZeroCounts). Save/restore the UI modifier flags so we
-                // don't interfere with real clicks.
                 bool savedEntire = vm.IsEntireStackModifierActive;
                 bool savedFive = vm.IsFiveStackModifierActive;
                 vm.IsEntireStackModifierActive = false;
@@ -559,10 +765,8 @@ namespace SaleLoot
                         {
                             c.VM.TransactionCount = maxAffordable;
 
-                            // cameFromTradeData: false →
-                            //   ProcessSellItem uses item.TransactionCount, then calls
-                            //   ExecuteRemoveZeroCounts(), which drops the 0-count row
-                            //   from the visual list. This fixes the "0 шт" ghost entry.
+                            // cameFromTradeData:false → vanilla calls ExecuteRemoveZeroCounts,
+                            // which drops the 0-count row from the visual list.
                             _processSellItemMethod.Invoke(vm, new object[] { c.VM, false });
 
                             stagedUnits += maxAffordable;
@@ -671,6 +875,9 @@ namespace SaleLoot
 
                 case ItemObject.ItemTypeEnum.HorseHarness:
                     return LootCategory.HorseArmor;
+
+                case ItemObject.ItemTypeEnum.Goods:
+                    return LootCategory.Goods;
             }
 
             string name = t.ToString();
@@ -702,6 +909,8 @@ namespace SaleLoot
                 case "HorseHarness":
                 case "HorseArmor":
                     return LootCategory.HorseArmor;
+                case "Goods":
+                    return LootCategory.Goods;
             }
             return LootCategory.None;
         }
@@ -733,8 +942,40 @@ namespace SaleLoot
                 case LootCategory.Ammo: return s.MaxAmmoTier;
                 case LootCategory.Armor: return s.MaxArmorTier;
                 case LootCategory.HorseArmor: return s.MaxHorseArmorTier;
+                case LootCategory.Goods: return int.MaxValue;
             }
             return -1;
+        }
+
+        private static bool IsGoodsEnabled(string id, SaleLootSettings s)
+        {
+            if (s == null || string.IsNullOrEmpty(id)) return false;
+            switch (id)
+            {
+                case "wool": return s.GoodWool;
+                case "silver": return s.GoodSilver;
+                case "jewelry": return s.GoodJewelry;
+                case "salt": return s.GoodSalt;
+                case "spice": return s.GoodSpice;
+                case "cotton": return s.GoodCotton;
+                case "flax": return s.GoodFlax;
+                case "clay": return s.GoodClay;
+                case "pottery": return s.GoodPottery;
+                case "linen": return s.GoodLinen;
+                case "leather": return s.GoodLeather;
+                case "velvet": return s.GoodVelvet;
+                case "wine": return s.GoodWine;
+                case "oil": return s.GoodOil;
+                case "fur": return s.GoodFur;
+                case "hardwood": return s.GoodHardwood;
+                case "charcoal": return s.GoodCharcoal;
+                case "iron_ore": return s.GoodIronOre;
+                case "iron": return s.GoodIron;
+                case "steel": return s.GoodSteel;
+                case "fine_steel": return s.GoodFineSteel;
+                case "thamaskene_steel": return s.GoodThamaskeneSteel;
+                default: return false;
+            }
         }
 
         private static HashSet<string> GetLockedKeys()
